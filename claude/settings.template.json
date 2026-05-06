@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"\nimport sys, json, re\ndata = json.load(sys.stdin)\ncmd = data.get('tool_input', {}).get('command', '')\nif re.search(r'docker compose up\\b.*--build', cmd):\n    new_cmd = re.sub(r'docker compose up\\s+--build(\\s+-d)?(\\s+2>&1)?', r'docker compose build && docker compose up -d\\2', cmd)\n    out = {'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'updatedInput': {'command': new_cmd}, 'additionalContext': 'Rewrote --build to sequential build+up to prevent parallel RAM spike'}}\nelse:\n    out = {'hookSpecificOutput': {'hookEventName': 'PreToolUse'}}\nprint(json.dumps(out))\n\"",
+            "timeout": 5,
+            "statusMessage": "Checking docker build strategy..."
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -Command \"(New-Object Media.SoundPlayer 'C:\\Windows\\Media\\Windows Background.wav').PlaySync()\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'pane_id=\"${WEZTERM_PANE:-unknown}\"; if [[ \"$pane_id\" =~ ^[0-9]+$ ]]; then cat > \"$HOME/.claude/pane-sessions/${pane_id}.json\"; else echo \"resurrect: invalid WEZTERM_PANE: $pane_id\" >&2; cat > /dev/null; fi'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -Command \"(New-Object Media.SoundPlayer 'C:\\Windows\\Media\\notify.wav').PlaySync()\""
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash __USERHOME_BASH__/.claude/statusline-command.sh"
+  },
+  "enabledPlugins": {
+    "code-review@claude-plugins-official": true
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "dark",
+  "voiceEnabled": true,
+  "agentPushNotifEnabled": true
+}

@@ -1,0 +1,44 @@
+# Never commit secrets or per-machine state.
+# This repo is meant to be reproducible from clean templates only.
+
+# Claude Code per-machine / per-session state, if anyone copies it in
+**/sessions/
+**/cache/
+**/telemetry/
+**/statsig/
+**/file-history/
+**/pane-sessions/
+**/paste-cache/
+**/shell-snapshots/
+**/session-env/
+**/stats-cache.json
+**/history.jsonl
+**/mcp-needs-auth-cache.json
+**/statusline-debug.json
+
+# Auto-memory is private by design; only the structure is documented
+**/projects/*/memory/
+
+# Resolved settings (with real paths/keys substituted in) - templates only
+claude/settings.json
+claude/settings.local.json
+**/settings.local.json
+
+# Secrets that should never be checked in
+.env
+.env.*
+*.pem
+*.key
+secrets/
+**/credentials
+**/credentials.json
+**/.aws/
+
+# Editor + OS junk
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
