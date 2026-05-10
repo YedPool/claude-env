@@ -84,7 +84,9 @@ if ($SkipVSCode) {
     )
     foreach ($ext in $extensions) {
         Write-Step "code --install-extension $ext"
-        & code --install-extension $ext --force 2>&1 | Out-Host
+        # See note in install-tier-b.ps1: avoid `2>&1 | Out-Host` on
+        # native commands under PS 5.1 + ErrorAction='Stop'.
+        & code --install-extension $ext --force
     }
 } else {
     Write-Skip "VS Code 'code' not on PATH; skipping extension install"
