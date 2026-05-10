@@ -37,13 +37,18 @@ $packages = @(
 
 foreach ($pkg in $packages) {
     Write-Step "Installing $($pkg.Name) ($($pkg.Id))"
-    & winget install --id $pkg.Id --exact --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Host
+    # Do not pipe `2>&1 | Out-Host`. On Windows PowerShell 5.1 that
+    # redirect wraps every native-command stderr line as a
+    # NativeCommandError, which under $ErrorActionPreference='Stop'
+    # terminates the script even when the executable returned 0.
+    # Native command output reaches the host on its own.
+    & winget install --id $pkg.Id --exact --silent --accept-package-agreements --accept-source-agreements
 }
 
 # WSL - built into Windows. Idempotent: re-running prints a no-op message.
 Write-Step "Ensuring WSL is enabled"
 try {
-    & wsl --install --no-distribution 2>&1 | Out-Host
+    & wsl --install --no-distribution
 } catch {
     Write-Skip "wsl --install reported: $($_.Exception.Message)"
 }
@@ -58,7 +63,7 @@ $pipPkgs = @('flake8', 'pytest', 'pyinstaller')
 if (Get-Command python -ErrorAction SilentlyContinue) {
     foreach ($p in $pipPkgs) {
         Write-Step "pip install --upgrade $p"
-        & python -m pip install --upgrade --quiet $p 2>&1 | Out-Host
+        & python -m pip install --upgrade --quiet $p
     }
 } else {
     Write-Skip "python not on PATH yet; open a new shell and re-run this script to finish pip installs"
@@ -69,7 +74,7 @@ $npmPkgs = @('@anthropic-ai/claude-code')
 if (Get-Command npm -ErrorAction SilentlyContinue) {
     foreach ($p in $npmPkgs) {
         Write-Step "npm install -g $p"
-        & npm install -g $p 2>&1 | Out-Host
+        & npm install -g $p
     }
 } else {
     Write-Skip "npm not on PATH yet; open a new shell and re-run this script to finish npm installs"
