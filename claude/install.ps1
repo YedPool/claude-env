@@ -32,8 +32,17 @@ foreach ($sub in @('', 'skills', 'agents', 'pane-sessions', 'backups')) {
 function Backup-IfExists($src) {
     if (-not (Test-Path $src)) { return }
     if ($NoBackup)              { return }
-    $rel = Resolve-Path $src -Relative -RelativeBasePath $claudeDir 2>$null
-    if (-not $rel) { $rel = Split-Path $src -Leaf }
+    # Compute relative path manually. Resolve-Path's -RelativeBasePath
+    # is PowerShell 7+ only; Windows PowerShell 5.1 errors out on the
+    # parameter and (under $ErrorActionPreference = 'Stop') aborts the
+    # whole install before any backup is written.
+    $srcFull  = (Resolve-Path $src).Path
+    $baseFull = (Resolve-Path $claudeDir).Path
+    if ($srcFull.StartsWith($baseFull, [StringComparison]::OrdinalIgnoreCase)) {
+        $rel = $srcFull.Substring($baseFull.Length).TrimStart('\','/')
+    } else {
+        $rel = Split-Path $src -Leaf
+    }
     $dest = Join-Path $backupDir $rel
     New-Item -ItemType Directory -Force -Path (Split-Path $dest -Parent) | Out-Null
     Copy-Item -Path $src -Destination $dest -Recurse -Force
