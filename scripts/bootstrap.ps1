@@ -65,4 +65,5 @@ Write-Host ""
 Write-Host "If you installed Tier A, also install plugins from inside Claude Code:" -ForegroundColor Yellow
 Write-Host "  /plugin marketplace add claude-plugins-official" -ForegroundColor Yellow
 Write-Host "  /plugin install code-review@claude-plugins-official" -ForegroundColor Yellow
-Write-Host "  /plugin install deep-review@claude-plugins-official" -ForegroundColor Yellow
+Write-Host "(deep-review is a local custom skill, not a marketplace plugin -" -ForegroundColor Yellow
+Write-Host " Tier A already installed it under ~/.claude/skills/deep-review/.)" -ForegroundColor Yellow

@@ -97,5 +97,6 @@ Write-Host "Next steps:" -ForegroundColor Yellow
 Write-Host "  - If this is the first install, install plugins from inside Claude Code:" -ForegroundColor Yellow
 Write-Host "      /plugin marketplace add claude-plugins-official"  -ForegroundColor Yellow
 Write-Host "      /plugin install code-review@claude-plugins-official"  -ForegroundColor Yellow
-Write-Host "      /plugin install deep-review@claude-plugins-official"  -ForegroundColor Yellow
+Write-Host "    (deep-review ships as a local custom skill in this repo;" -ForegroundColor Yellow
+Write-Host "     do NOT install it from the marketplace - it would shadow ours.)" -ForegroundColor Yellow
 Write-Host "  - The status line + SessionStart hook need Git Bash on PATH (Tier B installs it)." -ForegroundColor Yellow

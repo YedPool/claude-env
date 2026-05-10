@@ -9,7 +9,14 @@ plugins the author has installed so a fresh machine can match.
 | Plugin | Marketplace | Notes |
 |--------|-------------|-------|
 | `code-review` | `claude-plugins-official` | Listed in `settings.json` under `enabledPlugins`. Provides a slash-command code-review workflow. |
-| `deep-review` | `claude-plugins-official` | Installed under `~/.claude/plugins/marketplaces/...`. Shows up as a Skill. Provides the multi-agent security/optimization/traceability review. |
+
+> Note: `deep-review` is **not** a plugin in this setup. It is a local
+> custom skill maintained in `claude/skills/deep-review/SKILL.md` and
+> installed by `claude/install.ps1` directly into
+> `~/.claude/skills/deep-review/`. Do NOT install
+> `deep-review@claude-plugins-official` from the marketplace - the
+> marketplace plugin shares the name but is not the same thing, and
+> installing it would shadow the custom skill.
 
 ## Install on a fresh machine
 
@@ -18,7 +25,6 @@ Open Claude Code in any directory and run:
 ```text
 /plugin marketplace add claude-plugins-official
 /plugin install code-review@claude-plugins-official
-/plugin install deep-review@claude-plugins-official
 ```
 
 If the `claude-plugins-official` marketplace is the default, the first
@@ -32,8 +38,9 @@ Three things that all show up in different parts of `~/.claude/`:
 
 - **Skills** (`~/.claude/skills/<name>/SKILL.md`) — invoked via the
   `Skill` tool or via `/<name>`. Author maintains custom ones in
-  `claude/skills/` (mentor, deep-review-as-a-Skill copy is technically a
-  plugin but lives under skills too).
+  `claude/skills/`: `mentor`, `deep-review`, `neon-postgres`. The
+  `deep-review` skill is hand-maintained, not a copy of any
+  marketplace plugin.
 - **Plugins** (`~/.claude/plugins/`) — third-party bundles installed
   via `/plugin`. Need a marketplace add + install.
 - **Agents** (`~/.claude/agents/<name>.md`) — custom subagent
