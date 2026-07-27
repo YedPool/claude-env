@@ -1,0 +1,89 @@
+# Rendered by dotfiles/install-tier-c.ps1 to %USERPROFILE%\.ssh\config
+#
+# Host aliases for the Orahvision WireGuard mesh (fleet devices reachable
+# through the hub) plus a couple of standalone dev targets.
+#
+# Key files these aliases reference:
+#   ~/.ssh/id_ed25519             general SSH key (GitHub + fleet devices)
+#   ~/.ssh/orah-wireguard-hub.pem WG hub SSH key (must match hub's authorized_keys)
+#
+# Neither key is in this repo. Both are transferred by the secrets-handoff
+# script (tools/export-secrets.ps1 on your existing box, then
+# tools/import-secrets.ps1 on the new box).
+#
+# The hub public IP and fleet-device 10.0.0.X addresses are also documented
+# in orahvision-wireguard/docs/fleet-devices.md (SSOT).
+
+# Project Monopoly -- test device outside corporate firewall
+# Used for Clerk auth testing and browser-based e2e testing.
+# The corporate firewall (GenTech/Techloq SSL inspection) interferes
+# with Clerk auth flows, so we route browser testing through this device.
+Host monopoly-test
+    HostName 192.168.1.177
+    User yeclaw
+    IdentityFile ~/.ssh/id_ed25519
+    StrictHostKeyChecking no
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+
+# monopoly-test via WireGuard hub jump (10.0.0.8) -- works from anywhere
+Host monopoly
+    HostName 10.0.0.8
+    User yeclaw
+    IdentityFile ~/.ssh/id_ed25519
+    ProxyJump ov615-hub
+    StrictHostKeyChecking no
+
+# OV615 via WireGuard hub jump
+Host ov615
+  HostName 10.0.0.3
+  User orahv
+  IdentityFile ~/.ssh/id_ed25519
+  ProxyJump ov615-hub
+
+Host ov615-hub
+  HostName 18.117.224.173
+  User ubuntu
+  IdentityFile ~/.ssh/orah-wireguard-hub.pem
+
+Host ov-new
+  HostName 10.0.0.4
+  User Orah
+  IdentityFile ~/.ssh/id_ed25519
+  ProxyJump ov615-hub
+
+# OV638 via WireGuard hub jump (Orah user, bootstrapped 2026-05-08)
+Host ov638
+  HostName 10.0.0.6
+  User Orah
+  IdentityFile ~/.ssh/id_ed25519
+  ProxyJump ov615-hub
+
+Host ov615-local
+  HostName 192.168.1.156
+  User orah
+  IdentityFile ~/.ssh/id_ed25519
+  StrictHostKeyChecking no
+
+# OV638 via OV615 LAN jump -- bypasses broken WG tunnel
+Host ov638-lan
+  HostName 192.168.1.168
+  User Orah
+  IdentityFile ~/.ssh/id_ed25519
+  ProxyJump ov615
+  StrictHostKeyChecking no
+
+Host ov617
+  HostName 10.0.0.10
+  User orah
+  IdentityFile ~/.ssh/id_ed25519
+  ProxyJump ov615-hub
+  ServerAliveInterval 30
+
+# OV629 via WireGuard hub jump (orah user, alias added 2026-07-06)
+Host ov629
+  HostName 10.0.0.11
+  User orah
+  IdentityFile ~/.ssh/id_ed25519
+  ProxyJump ov615-hub
+  ServerAliveInterval 30
