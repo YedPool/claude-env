@@ -1,5 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Process *)"
+    ],
+    "defaultMode": "bypassPermissions"
+  },
+  "model": "opus[1m]",
   "hooks": {
     "PreToolUse": [
       {
@@ -55,8 +62,12 @@
   "enabledPlugins": {
     "code-review@claude-plugins-official": true
   },
+  "autoCompactWindow": 1000000,
+  "autoUpdatesChannel": "stable",
+  "tui": "default",
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
-  "voiceEnabled": true,
-  "agentPushNotifEnabled": true
+  "editorMode": "normal",
+  "agentPushNotifEnabled": true,
+  "voiceEnabled": true
 }
