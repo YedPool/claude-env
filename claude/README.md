@@ -9,8 +9,9 @@ explains what each piece is and why it exists.
 | File / Dir | Destination | Purpose |
 |------------|-------------|---------|
 | `CLAUDE.md` | `~/.claude/CLAUDE.md` | Universal global rules. Project-agnostic. |
-| `settings.template.json` | `~/.claude/settings.json` | Hooks, statusline, theme, plugin enable list. The template has a `__USERHOME_BASH__` placeholder that the installer substitutes. |
-| `skills/` | `~/.claude/skills/` | `mentor`, `deep-review`, `neon-postgres` skills. |
+| `settings.template.json` | `~/.claude/settings.json` | Hooks, statusline, theme, plugin enable list. Two placeholders the installer substitutes: `__USERHOME_BASH__` (Git-Bash path to `$HOME`) and `__CLAUDE_DIR_JSON__` (Windows path to `~/.claude`, backslashes doubled for JSON). |
+| `skills/` | `~/.claude/skills/` | `mentor`, `deep-review`, `neon-postgres`, `run-complete-handoff` skills. |
+| `hooks/` | `~/.claude/hooks/` | Hook scripts referenced by absolute path from `settings.json`. |
 | `agents/` | `~/.claude/agents/` | `plan-executor` subagent. |
 | `statusline-command.sh` | `~/.claude/statusline-command.sh` | Tiny bash script that renders `ctx: NN%` in the status line. Needs Git Bash. |
 
@@ -22,9 +23,20 @@ explains what each piece is and why it exists.
 - **Notification hook** — plays `Windows Background.wav` when Claude
   needs attention.
 - **SessionStart hook** — under WezTerm, persists per-pane session JSON
-  to `~/.claude/pane-sessions/<pane_id>.json` so resurrect plugins can
-  restore state. Falls through silently when not in WezTerm.
-- **Stop hook** — plays `notify.wav` when the agent finishes a turn.
+  to `~/.claude/pane-sessions/<pane_id>.json` so resurrect plugins and
+  `wezfleet` can tell one session from another. Falls through silently when
+  not in WezTerm.
+
+  It also declines to write when `CLAUDE_CODE_CHILD_SESSION` is set. Claude
+  Code puts that marker in every process it spawns, and `WEZTERM_PANE` is
+  inherited the same way, so a nested `claude` - a probe, a `claude -p` from
+  inside a session's own shell - would otherwise fire this hook with ITS
+  session id and THIS pane's number and take the record over. Observed doing
+  exactly that on 2026-09-04.
+- **Stop hooks** - two of them. The first plays `notify.wav` when the agent
+  finishes a turn. The second runs `hooks/run-complete-handoff.mjs`, which
+  asks for the five-part handoff when a run of real work ends without one
+  (see below).
 - **Status line** — calls `bash <home>/.claude/statusline-command.sh`,
   which extracts `used_percentage` from the JSON Claude Code pipes in
   and prints `ctx: NN%`.
@@ -32,6 +44,44 @@ explains what each piece is and why it exists.
   acknowledged the dangerous mode warning; do not prompt again.
 - **`agentPushNotifEnabled: true`** — push notifications when subagents
   finish.
+
+## The run-complete handoff
+
+`skills/run-complete-handoff` defines the shape of the last message of a run:
+
+    I    What happened
+    II   Where we are now
+    III  Questions
+    IV   My next steps
+    V    What I need from you
+
+Numbered one-liners under every heading, every heading present even when the
+answer is "nothing", and section I leads with any correction to something said
+earlier in the run.
+
+The skill is the definition. The Stop hook is the floor: the moment the format
+matters most is the end of a long run, when context is full and wrapping up is
+exactly when it gets forgotten.
+
+**The hook is deliberately reluctant.** Blocking wrongly costs a turn and
+answers a one-line question with five roman numerals; failing to block costs a
+handoff the founder can ask for in four words. Those are not symmetric, so every
+uncertain case exits 0. It stays silent when:
+
+- `stop_hook_active` is set (it already asked once this turn - the loop guard,
+  and the reason a Stop hook cannot wedge a session)
+- the last message already has four of the five headings, however they were
+  punctuated
+- fewer than four tool calls happened since the last human turn, and none of
+  them edited a file
+- a background task is still running - work in flight is not a finished run
+
+Set `HANDOFF_HOOK=off` to disable it entirely.
+
+Tests: `node claude/hooks/test-run-complete-handoff.mjs` (21 checks). Every
+"stays silent" case is paired with a control that differs in one field and does
+block, because a hook that never fires and a hook that is wired correctly
+produce identical output on a quiet turn.
 
 ## Plugins
 
@@ -77,3 +127,8 @@ diff them against `claude/` before running the script.
   it, the hooks no-op silently and the status line shows `ctx: --`.
 - The WezTerm `SessionStart` hook is harmless on other terminals — it
   guards on `WEZTERM_PANE` being numeric and falls through.
+- The handoff hook reads the transcript to count tool calls since the last
+  human turn. Tool RESULTS are recorded as `user` entries (123 of 134 in a
+  live transcript), so a reader that stops at the first `user` entry measures
+  one tool call instead of the whole run. `test-run-complete-handoff.mjs`
+  pins this in both directions.

@@ -21,7 +21,7 @@ $backupDir  = Join-Path $backupRoot $timestamp
 function Write-Step($msg) { Write-Host "[claude/install] $msg" -ForegroundColor Cyan }
 
 # --- 1. Make sure the target tree exists ---------------------------------
-foreach ($sub in @('', 'skills', 'agents', 'pane-sessions', 'backups')) {
+foreach ($sub in @('', 'skills', 'agents', 'hooks', 'pane-sessions', 'backups')) {
     $p = if ($sub) { Join-Path $claudeDir $sub } else { $claudeDir }
     if (-not (Test-Path $p)) {
         New-Item -ItemType Directory -Force -Path $p | Out-Null
@@ -58,6 +58,9 @@ Get-ChildItem (Join-Path $here 'skills') -Directory -ErrorAction SilentlyContinu
 Get-ChildItem (Join-Path $here 'agents') -File -ErrorAction SilentlyContinue | ForEach-Object {
     Backup-IfExists (Join-Path $claudeDir "agents\$($_.Name)")
 }
+Get-ChildItem (Join-Path $here 'hooks') -File -ErrorAction SilentlyContinue | ForEach-Object {
+    Backup-IfExists (Join-Path $claudeDir "hooks\$($_.Name)")
+}
 
 # --- 3. Copy CLAUDE.md ---------------------------------------------------
 Write-Step "Installing CLAUDE.md"
@@ -70,8 +73,20 @@ $drive = $env:USERPROFILE.Substring(0, 1).ToLower()
 $rest  = $env:USERPROFILE.Substring(2) -replace '\\', '/'
 $homeBash = "/$drive$rest"
 
+# Hook commands are JSON string values, so every backslash in the path has to survive
+# as an escaped pair. Rendering C:\Users\... raw produces \U and \b, which is invalid
+# JSON and would leave Claude Code unable to read its own settings.
+$claudeDirJson = $claudeDir -replace '\\', '\\'
+
 $tmpl = Get-Content -Raw (Join-Path $here 'settings.template.json')
 $rendered = $tmpl.Replace('__USERHOME_BASH__', $homeBash)
+$rendered = $rendered.Replace('__CLAUDE_DIR_JSON__', $claudeDirJson)
+
+# Refuse to write settings Claude Code cannot parse. A template edit that breaks the
+# JSON would otherwise land silently and take the whole environment down with it.
+try { $null = $rendered | ConvertFrom-Json } catch {
+    throw "settings.template.json did not render to valid JSON: $_"
+}
 $rendered | Set-Content -NoNewline -Encoding UTF8 (Join-Path $claudeDir 'settings.json')
 
 # --- 5. Copy statusline ---------------------------------------------------
@@ -89,6 +104,14 @@ Get-ChildItem (Join-Path $here 'skills') -Directory | ForEach-Object {
 Write-Step "Installing agents"
 Get-ChildItem (Join-Path $here 'agents') -File -Filter '*.md' | ForEach-Object {
     Copy-Item $_.FullName (Join-Path $claudeDir "agents\$($_.Name)") -Force
+}
+
+# Hooks are referenced BY ABSOLUTE PATH from settings.json, so they have to land in
+# ~/.claude/hooks and the rendered settings has to point at that copy - not at this
+# checkout, which may be a temp clone that gets deleted.
+Write-Step "Installing hooks"
+Get-ChildItem (Join-Path $here 'hooks') -File -ErrorAction SilentlyContinue | ForEach-Object {
+    Copy-Item $_.FullName (Join-Path $claudeDir "hooks\$($_.Name)") -Force
 }
 
 Write-Step "Done."

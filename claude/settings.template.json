@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'pane_id=\"${WEZTERM_PANE:-unknown}\"; if [[ \"$pane_id\" =~ ^[0-9]+$ ]]; then cat > \"$HOME/.claude/pane-sessions/${pane_id}.json\"; else echo \"resurrect: invalid WEZTERM_PANE: $pane_id\" >&2; cat > /dev/null; fi'"
+            "command": "bash -c 'pane_id=\"${WEZTERM_PANE:-unknown}\"; if [ -n \"$CLAUDE_CODE_CHILD_SESSION\" ]; then echo \"resurrect: nested claude (child marker) - not claiming pane $pane_id\" >&2; cat > /dev/null; elif [[ \"$pane_id\" =~ ^[0-9]+$ ]]; then cat > \"$HOME/.claude/pane-sessions/${pane_id}.json\"; else echo \"resurrect: invalid WEZTERM_PANE: $pane_id\" >&2; cat > /dev/null; fi'"
           }
         ]
       }
@@ -43,10 +43,20 @@
           {
             "type": "command",
             "command": "powershell -Command \"(New-Object Media.SoundPlayer 'C:\\Windows\\Media\\notify.wav').PlaySync()\""
+          },
+          {
+            "type": "command",
+            "command": "node \"__CLAUDE_DIR_JSON__\\hooks\\run-complete-handoff.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking the run ended with a handoff..."
           }
         ]
       }
     ]
+  },
+  "env": {
+    "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1",
+    "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
   },
   "statusLine": {
     "type": "command",
