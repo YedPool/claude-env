@@ -21,7 +21,22 @@
 //
 // Turn it off entirely with HANDOFF_HOOK=off.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, openSync, fstatSync, readSync, closeSync } from "node:fs";
+
+// How much of the transcript tail to read. A single turn is a few KB; 2 MB is three
+// orders of magnitude of headroom.
+//
+// WHY A CAP AT ALL, measured on this box 2026-09-07: transcripts here reach 264 MB, and
+// two exceed 50 MB. Reading one whole file to look at its last few KB costs a ~264
+// M-char string (~528 MB as UTF-16) plus a split array, on EVERY turn end, in EVERY
+// session - on a machine whose documented failure mode is starving itself with parallel
+// sessions. Worse, past V8's ~536 M-char string limit readFileSync throws
+// ERR_STRING_TOO_LONG, the catch-all swallows it, and the hook silently never fires
+// again - on exactly the longest runs that most need a handoff.
+//
+// Do not raise this to "be safe". If a turn genuinely does not fit, the correct outcome
+// is the one below: no human turn found, treat it as not-a-run, stay silent.
+const TAIL_BYTES = 2 * 1024 * 1024;
 
 // A hook that throws is a hook that breaks every session on the machine. One try/catch
 // around everything, and every exit is 0 except the single deliberate block.
@@ -97,7 +112,7 @@ function measureWork(transcriptPath) {
 
   let lines;
   try {
-    lines = readFileSync(transcriptPath, "utf8").split("\n");
+    lines = tailLines(transcriptPath);
   } catch {
     return none; // unreadable transcript -> say nothing
   }
@@ -105,6 +120,7 @@ function measureWork(transcriptPath) {
   const MUTATING = new Set(["Edit", "Write", "NotebookEdit"]);
   let tools = 0;
   let mutated = false;
+  let foundHumanTurn = false;
 
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim();
@@ -117,10 +133,28 @@ function measureWork(transcriptPath) {
       continue;
     }
 
-    // Stop at the last REAL human turn. Tool results are recorded as user entries too,
-    // and counting from one of those would measure a single tool call instead of the
-    // whole run - the difference between "this was a conversation" and "this was work".
-    if (entry.type === "user" && !isToolResult(entry)) break;
+    // Stop at the last REAL HUMAN turn, and note how much work "real" is doing there.
+    //
+    // Three different things wear the shape `type:"user"` with no tool_result block, and
+    // only one of them is a person typing:
+    //   - tool RESULTS (excluded by isToolResult - 123 of 134 user entries in a live
+    //     transcript, so a walk that ignores this measures one tool call, not a run)
+    //   - TASK NOTIFICATIONS from finished background work, promptSource:"system"
+    //   - SKILL INJECTIONS and local-command output, isMeta:true
+    //
+    // Measured across 286 real sessions: 51% of walks stopped at something the founder
+    // never typed, and 13.3% of sessions flipped verdict because of it. One case scanned
+    // 3 entries and concluded "not a run" where the true span was 3,961 entries and 663
+    // tool calls - a huge run that ended with no handoff asked for, because the last thing
+    // before it was a background-task notification.
+    //
+    // That failure is concentrated exactly here: this box's operating rule is that
+    // everything runs in the background, so task notifications are constant.
+    if (entry.type === "user" && !isToolResult(entry)) {
+      if (entry.isMeta === true || entry.promptSource === "system") continue;
+      foundHumanTurn = true;
+      break;
+    }
 
     if (entry.type !== "assistant") continue;
     for (const block of contentBlocks(entry)) {
@@ -130,11 +164,36 @@ function measureWork(transcriptPath) {
     }
   }
 
+  // No human turn inside the tail window means we cannot attribute this work to THIS
+  // turn - the counted calls may span several. Staying silent is the side of the
+  // asymmetry this file already chose, and the miss it costs (a single turn generating
+  // more than TAIL_BYTES) is rare and deliberate rather than accidental.
+  if (!foundHumanTurn) return none;
+
   // The threshold. Four tool calls is roughly "looked something up and answered"; a real
   // run clears it easily. A single file edit counts on its own, because a change to the
   // founder's tree is exactly the thing that must never end without being reported.
   const isRun = mutated || tools >= 4;
   return { isRun, tools, mutated };
+}
+
+// Read only the last TAIL_BYTES of the file, not the file.
+//
+// The first line of a mid-file read is almost always a fragment of a longer line, so it is
+// dropped: JSON.parse would reject it anyway, but dropping it says why.
+function tailLines(path) {
+  const fd = openSync(path, "r");
+  try {
+    const size = fstatSync(fd).size;
+    const start = Math.max(0, size - TAIL_BYTES);
+    const buf = Buffer.allocUnsafe(size - start);
+    if (buf.length > 0) readSync(fd, buf, 0, buf.length, start);
+    const lines = buf.toString("utf8").split("\n");
+    if (start > 0) lines.shift();
+    return lines;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function isToolResult(entry) {
