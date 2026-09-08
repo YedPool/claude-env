@@ -37,7 +37,22 @@ if ($parsed) {
     $handoff = @($parsed.hooks.Stop[0].hooks) | Where-Object { "$($_.command)" -like "*run-complete-handoff*" }
     Check ($null -ne $handoff) "the handoff Stop hook is present"
     Check ("$($parsed.hooks.SessionStart[0].hooks[0].command)" -like "*CLAUDE_CODE_CHILD_SESSION*") "SessionStart carries the child-session guard"
-    Check (-not ($raw -match '__[A-Z_]+__')) "no unsubstituted placeholders remain"
+    # [A-Z0-9_], not [A-Z_]: a future __FOO2__ would otherwise slip past the guard
+    # unsubstituted, and both install.ps1 and the template already allow digits.
+    Check (-not ($raw -match '__[A-Z0-9_]+__')) "no unsubstituted placeholders remain"
+
+    # ASSERT ON THE BYTES, not on what Get-Content hands back. `Get-Content -Raw` strips a
+    # UTF-8 BOM transparently in PS 5.1, so the "valid JSON" check above passes just as
+    # happily on a BOM'd file - it structurally cannot see the defect it appears to cover.
+    $bytes = [System.IO.File]::ReadAllBytes((Join-Path $claudeDir "settings.json"))
+    $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+    Check (-not $hasBom) "settings.json is written WITHOUT a UTF-8 BOM"
+
+    # And prove the same bytes survive a real JSON.parse, which is the consumer that cares.
+    $probe = Join-Path $sandbox "parse.js"
+    Set-Content -Path $probe -Encoding ascii -Value "const f=require('fs');try{JSON.parse(f.readFileSync(process.argv[2],'utf8'));console.log('OK');}catch(e){console.log('THREW');}"
+    $verdict = & node $probe (Join-Path $claudeDir "settings.json")
+    Check ("$verdict" -eq "OK") "node JSON.parse accepts the rendered settings.json"
 
     # The hook path in settings must point at a file that EXISTS in the installed tree.
     if ($handoff) {
