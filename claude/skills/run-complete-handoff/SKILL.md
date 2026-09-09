@@ -27,11 +27,16 @@ item, with no blank line between them and none between items. Exactly one
 blank line separates a section's last item from the next heading. Nothing
 else.
 
-**Sub-numbered items are indented.** When a line genuinely has children,
-number them under the parent (1.1, 1.2) and indent each by three spaces so
-the hierarchy reads at a glance. Never a sub-item flush left with its parent,
-and never deeper than one level - a 1.1.1 is a sign the section is carrying
-a narrative and should be cut.
+**Sub-numbered items are indented, and the indent must SURVIVE RENDERING.**
+When a line genuinely has children, number them under the parent (1.1, 1.2)
+and write each as a NESTED BULLET: three spaces, a hyphen, the number, the
+text -- `   - 1.1. text`. The message is rendered as markdown, and a line
+that is merely indented three spaces under item 1 is a continuation of item
+1: the renderer folds it flush and the indent vanishes (observed 2026-09-08,
+first handoff after the rule was written). Only a nested list line renders
+indented. Never a sub-item flush left with its parent, and never deeper than
+one level - a 1.1.1 is a sign the section is carrying a narrative and should
+be cut.
 
 **All three headings appear, every time.** A missing section reads as
 forgotten, and the founder cannot tell the difference between a section you
@@ -83,8 +88,8 @@ from the diff and C is the part only you know.
     **B -- Where we are now**
     1. This box has the panel on and the clobbered pane record restored.
     2. The branch holds seven files, tested, uncommitted.
-       2.1. Five are the hook and its tests; two are the README and the skill.
-       2.2. The hook is also installed locally and passing the same checks.
+       - 2.1. Five are the hook and its tests; two are the README and the skill.
+       - 2.2. The hook is also installed locally and passing the same checks.
     3. Nothing is on GitHub yet, so no other machine has any of it.
 
     **C -- What's next**
