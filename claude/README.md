@@ -35,7 +35,7 @@ explains what each piece is and why it exists.
   exactly that on 2026-09-04.
 - **Stop hooks** - two of them. The first plays `notify.wav` when the agent
   finishes a turn. The second runs `hooks/run-complete-handoff.mjs`, which
-  asks for the five-part handoff when a run of real work ends without one
+  asks for the three-part handoff when a run of real work ends without one
   (see below).
 - **Status line** — calls `bash <home>/.claude/statusline-command.sh`,
   which extracts `used_percentage` from the JSON Claude Code pipes in
@@ -49,36 +49,50 @@ explains what each piece is and why it exists.
 
 `skills/run-complete-handoff` defines the shape of the last message of a run:
 
-    I    What happened
-    II   Where we are now
-    III  Questions
-    IV   My next steps
-    V    What I need from you
+    A  What happened
+    B  Where we are now
+    C  What's next
 
-Numbered one-liners under every heading, every heading present even when the
-answer is "nothing", and section I leads with any correction to something said
-earlier in the run.
+Numbered one-liners under every heading, no blank line between a heading and
+its items, all three headings present, and section A leads with any correction
+to something said earlier in the run. C holds everything forward-looking in one
+list - questions, next steps, asks - and only the lines that exist: never
+"none", never "nothing until you reply".
+
+Until 2026-09-08 this was five roman-numeral sections (I-V, with separate
+Questions / My next steps / What I need from you). The founder retired that
+form the same day: letters, less blank space, and the last three folded into
+C. The hook still accepts the old form so a session that loaded the earlier
+skill is not asked twice.
 
 The skill is the definition. The Stop hook is the floor: the moment the format
 matters most is the end of a long run, when context is full and wrapping up is
 exactly when it gets forgotten.
 
 **The hook is deliberately reluctant.** Blocking wrongly costs a turn and
-answers a one-line question with five roman numerals; failing to block costs a
+answers a one-line question with three lettered headings; failing to block costs a
 handoff the founder can ask for in four words. Those are not symmetric, so every
 uncertain case exits 0. It stays silent when:
 
 - `stop_hook_active` is set (it already asked once this turn - the loop guard,
   and the reason a Stop hook cannot wedge a session)
-- the last message already has four of the five headings, however they were
-  punctuated
+- the last message already has two of the three headings (or four of the old
+  five), however they were punctuated
 - fewer than four tool calls happened since the last human turn, and none of
   them edited a file
-- a background task is still running - work in flight is not a finished run
+- a background task is still running - work in flight is not a finished run.
+  The hook input's `background_tasks` lists agents only, so the hook ALSO
+  counts launches in the transcript since the last human turn (Agent calls,
+  shells started with `run_in_background`, foreground commands the harness
+  moved to the background on timeout) against task notifications, and stays
+  silent while any launch is unanswered. Measured 2026-09-08 across every
+  transcript on the founder's box: 12 firings since install, 4 of them on a
+  session that had ended its turn to wait for a backgrounded job - the
+  founder's whole operating model, and the case that made him ask.
 
 Set `HANDOFF_HOOK=off` to disable it entirely.
 
-Tests: `node claude/hooks/test-run-complete-handoff.mjs` (21 checks). Every
+Tests: `node claude/hooks/test-run-complete-handoff.mjs` (36 checks). Every
 "stays silent" case is paired with a control that differs in one field and does
 block, because a hook that never fires and a hook that is wired correctly
 produce identical output on a quiet turn.
