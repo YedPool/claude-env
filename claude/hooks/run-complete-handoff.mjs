@@ -104,10 +104,12 @@ function hasHandoff(text) {
   if (!text) return false;
   // Current form (founder, 2026-09-08, third revision): "1. What happened",
   // "2. Where we are now", "3. What's next", inside a fenced text block.
+  // The separator after the digit may be a dot, a bracket, a dash of any width or just
+  // space, but no WORD may sit between them: "1. The what happened" is prose.
   const numbered = [
-    /(^|\n)\s*1[.)]?\s+what happened/i,
-    /(^|\n)\s*2[.)]?\s+where we are/i,
-    /(^|\n)\s*3[.)]?\s+what'?s next/i,
+    /(^|\n)\s*1[^\n\w]{1,4}what happened/i,
+    /(^|\n)\s*2[^\n\w]{1,4}where we are/i,
+    /(^|\n)\s*3[^\n\w]{1,4}what'?s next/i,
   ];
   if (numbered.filter((re) => re.test(text)).length >= 2) return true;
 
