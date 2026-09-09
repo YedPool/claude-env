@@ -22,21 +22,29 @@ from you) is retired; the last three folded into C.
 fact. Not paragraphs with numbers in front of them: if a line needs a comma
 splice and a subordinate clause to stay one sentence, it is two lines.
 
+**THE WHOLE HANDOFF GOES INSIDE ONE FENCED PLAIN-TEXT BLOCK.** Open with a
+line of three backticks followed by the word `text`, close with three
+backticks, and put nothing outside the fence. The message is rendered as
+markdown in the founder's terminal, and two things went wrong the day the
+A/B/C form was introduced (2026-09-08): the bold first heading was cut off,
+and sub-item indentation vanished -- three spaces under item 1 is a
+continuation of item 1 in markdown, and even a nested bullet was flattened.
+Inside a fence nothing is interpreted: every space is kept, no line is
+restyled, no marker is eaten. Headings are plain `A. What happened`, no
+bold, no asterisks, no hyphens.
+
 **Tight spacing.** The heading line is immediately followed by its first
 item, with no blank line between them and none between items. Exactly one
 blank line separates a section's last item from the next heading. Nothing
 else.
 
-**Sub-numbered items are indented, and the indent must SURVIVE RENDERING.**
-When a line genuinely has children, number them under the parent (1.1, 1.2)
-and write each as a NESTED BULLET: three spaces, a hyphen, the number, the
-text -- `   - 1.1. text`. The message is rendered as markdown, and a line
-that is merely indented three spaces under item 1 is a continuation of item
-1: the renderer folds it flush and the indent vanishes (observed 2026-09-08,
-first handoff after the rule was written). Only a nested list line renders
-indented. Never a sub-item flush left with its parent, and never deeper than
-one level - a 1.1.1 is a sign the section is carrying a narrative and should
-be cut.
+**Sub-numbered items are indented by four spaces.** When a line genuinely
+has children, number them under the parent (1.1, 1.2) and indent each by
+four spaces: `    1.1. text`. Inside the fence that indent is exactly what
+the founder sees. Never a sub-item flush left with its parent, and never
+deeper than one level - a 1.1.1 is a sign the section is carrying a
+narrative and should be cut. Wrap long lines at about 78 columns with the
+continuation indented to the text, so the number column stays clean.
 
 **All three headings appear, every time.** A missing section reads as
 forgotten, and the founder cannot tell the difference between a section you
@@ -77,7 +85,10 @@ from the diff and C is the part only you know.
 
 ## Worked example
 
-    **A -- What happened**
+The message, verbatim, fence included:
+
+    ```text
+    A. What happened
     1. You asked why there was no persistent todo panel; I first blamed the
        child-session marker and that was wrong.
     2. A two-arm probe settled it: marker set vs stripped gave identical
@@ -85,18 +96,19 @@ from the diff and C is the part only you know.
     3. The real gate is CLAUDE_CODE_ENABLE_TODO_TOOLS, and TodoWrite no longer
        exists as a tool.
 
-    **B -- Where we are now**
+    B. Where we are now
     1. This box has the panel on and the clobbered pane record restored.
     2. The branch holds seven files, tested, uncommitted.
-       - 2.1. Five are the hook and its tests; two are the README and the skill.
-       - 2.2. The hook is also installed locally and passing the same checks.
+        2.1. Five are the hook and its tests; two are the README and the skill.
+        2.2. The hook is also installed locally and passing the same checks.
     3. Nothing is on GitHub yet, so no other machine has any of it.
 
-    **C -- What's next**
+    C. What's next
     1. Run the one-liner in the open notepad and tell me it looks right.
     2. Swap the hand-rolled hook for the shipped one here, or leave it? I
        would swap it.
     3. I commit and open the PR once you have tested.
+    ```
 
 ## When NOT to use this
 
