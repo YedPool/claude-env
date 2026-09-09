@@ -49,21 +49,26 @@ explains what each piece is and why it exists.
 
 `skills/run-complete-handoff` defines the shape of the last message of a run:
 
-    A  What happened
-    B  Where we are now
-    C  What's next
+    1. What happened
+        1.1. ...
+    2. Where we are now
+        2.1. ...
+    3. What's next
+        3.1. ...
 
-Numbered one-liners under every heading, no blank line between a heading and
-its items, all three headings present, and section A leads with any correction
-to something said earlier in the run. C holds everything forward-looking in one
-list - questions, next steps, asks - and only the lines that exist: never
-"none", never "nothing until you reply".
+The whole thing inside one fenced text block, because the terminal renders
+the message as markdown and markdown flattened every indent and cut off a
+bold first heading. Items are N.M. one-liners indented four spaces, never
+wrapped; no blank line between a heading and its items; all three headings
+present; section 1 leads with any correction to something said earlier in
+the run. Section 3 holds everything forward-looking in one list - questions,
+next steps, asks - and only the lines that exist: never "none", never
+"nothing until you reply".
 
 Until 2026-09-08 this was five roman-numeral sections (I-V, with separate
-Questions / My next steps / What I need from you). The founder retired that
-form the same day: letters, less blank space, and the last three folded into
-C. The hook still accepts the old form so a session that loaded the earlier
-skill is not asked twice.
+Questions / My next steps / What I need from you); for part of that day it
+was lettered A/B/C. The hook still accepts both retired forms so a session
+that loaded an earlier skill is not asked twice.
 
 The skill is the definition. The Stop hook is the floor: the moment the format
 matters most is the end of a long run, when context is full and wrapping up is
@@ -76,8 +81,8 @@ uncertain case exits 0. It stays silent when:
 
 - `stop_hook_active` is set (it already asked once this turn - the loop guard,
   and the reason a Stop hook cannot wedge a session)
-- the last message already has two of the three headings (or four of the old
-  five), however they were punctuated
+- the last message already has two of the three headings (numbered or
+  lettered, or four of the old five), however they were punctuated
 - fewer than four tool calls happened since the last human turn, and none of
   them edited a file
 - a background task is still running - work in flight is not a finished run.
@@ -92,7 +97,7 @@ uncertain case exits 0. It stays silent when:
 
 Set `HANDOFF_HOOK=off` to disable it entirely.
 
-Tests: `node claude/hooks/test-run-complete-handoff.mjs` (36 checks). Every
+Tests: `node claude/hooks/test-run-complete-handoff.mjs` (38 checks). Every
 "stays silent" case is paired with a control that differs in one field and does
 block, because a hook that never fires and a hook that is wired correctly
 produce identical output on a quiet turn.

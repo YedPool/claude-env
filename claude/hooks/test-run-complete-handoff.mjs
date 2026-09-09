@@ -83,6 +83,20 @@ function transcript(name, { tools = 0, mutating = false, humanTurnFirst = true }
 }
 
 const HANDOFF_TEXT = [
+  "```text",
+  "1. What happened",
+  "    1.1. Did a thing.",
+  "",
+  "2. Where we are now",
+  "    2.1. Thing is done.",
+  "",
+  "3. What's next",
+  "    3.1. Tell me if you want it committed.",
+  "```",
+].join("\n");
+
+// The lettered form that lived for part of 2026-09-08. Still accepted.
+const LETTERED_HANDOFF_TEXT = [
   "**A -- What happened**",
   "1. Did a thing.",
   "",
@@ -134,7 +148,7 @@ try {
     const r = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: "All done!" });
     ok(r.code === 0, "exits 0 even when blocking (block is data, not an exit code)");
     ok(r.out?.decision === "block", "CONTROL: a 6-tool run with no handoff DOES block");
-    ok(/What's next/.test(r.out?.reason || ""), "and the reason carries the A/B/C format");
+    ok(/3\. What's next/.test(r.out?.reason || ""), "and the reason carries the 1 / 2 / 3 format");
     ok(!/What I need from you/.test(r.out?.reason || ""), "and no longer asks for the retired five-section form");
   }
   {
@@ -155,6 +169,11 @@ try {
     const t = transcript("done", { tools: 6 });
     const r = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: HANDOFF_TEXT });
     ok(r.out === null, "a message that already has the three sections is left alone");
+  }
+  {
+    const t = transcript("lettereddone", { tools: 6 });
+    const r = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: LETTERED_HANDOFF_TEXT });
+    ok(r.out === null, "the retired A/B/C form is still accepted");
   }
   {
     const t = transcript("olddone", { tools: 6 });
@@ -358,16 +377,22 @@ try {
     // U+2014 in the source of a test whose subject is exactly that character.
     const EM = String.fromCharCode(0x2014);
     const loose = [
-      `A ${EM} What happened`,
-      `B ${EM} Where we are now`,
-      `C ${EM} What's next`,
+      `1 ${EM} What happened`,
+      `2 ${EM} Where we are now`,
+      `3 ${EM} What's next`,
     ].join("\n");
     const r = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: loose });
-    ok(r.out === null, "recognises the format with em dashes instead of hyphens");
+    ok(r.out === null, "recognises the format with em dashes instead of dots");
 
-    const partial = "A -- What happened\n1. x";
+    const partial = "1. What happened\n    1.1. x";
     const r2 = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: partial });
-    ok(r2.out?.decision === "block", "CONTROL: one lettered section is not a handoff and still blocks");
+    ok(r2.out?.decision === "block", "CONTROL: one numbered section is not a handoff and still blocks");
+
+    // A numbered list in ordinary prose must not read as a handoff: "1. what happened"
+    // needs its sibling "2. where we are" before it counts.
+    const prose = "Here is the plan:\n1. What happened first was X.\n2. Then Y.\n3. Then Z.";
+    const r4 = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: prose });
+    ok(r4.out?.decision === "block", "CONTROL: an ordinary numbered list is not a handoff");
 
     const oldPartial = "I -- What happened\nII -- Where we are now";
     const r3 = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: oldPartial });

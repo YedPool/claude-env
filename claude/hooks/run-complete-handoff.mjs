@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 //
-// run-complete-handoff.mjs - Stop hook. Asks for the three-part handoff (A/B/C) when a
-// run of real work ends without one.
+// run-complete-handoff.mjs - Stop hook. Asks for the three-part handoff (1 / 2 / 3) when
+// a run of real work ends without one.
 //
 // WHY A HOOK AND NOT JUST THE SKILL. A skill fires when the model decides it applies,
 // and the moment the format matters most - the end of a long run, when context is full
@@ -102,6 +102,16 @@ function main() {
 // already wrote; the skill, not the hook, owns which form is current.
 function hasHandoff(text) {
   if (!text) return false;
+  // Current form (founder, 2026-09-08, third revision): "1. What happened",
+  // "2. Where we are now", "3. What's next", inside a fenced text block.
+  const numbered = [
+    /(^|\n)\s*1[.)]?\s+what happened/i,
+    /(^|\n)\s*2[.)]?\s+where we are/i,
+    /(^|\n)\s*3[.)]?\s+what'?s next/i,
+  ];
+  if (numbered.filter((re) => re.test(text)).length >= 2) return true;
+
+  // The lettered form that lived for part of one day. Accepted so nobody is nagged twice.
   const lettered = [
     /\bA\b[^\n]{0,12}what happened/i,
     /\bB\b[^\n]{0,12}where we are/i,
@@ -277,12 +287,13 @@ function block(work) {
   const reason = [
     `This run ${did}, and it is ending without a handoff.`,
     "",
-    "Invoke the run-complete-handoff skill and close with its three sections, as",
-    "numbered one-liners with no blank line between a heading and its items:",
+    "Invoke the run-complete-handoff skill and close with its three sections inside",
+    "ONE fenced text block, items as N.M. one-liners indented four spaces, never",
+    "wrapped, no blank line between a heading and its items:",
     "",
-    "    A  What happened     -- lead with any correction to what you said earlier",
-    "    B  Where we are now  -- state, present tense, gaps named as gaps",
-    "    C  What's next       -- questions, your next steps and what you need from",
+    "    1. What happened     -- lead with any correction to what you said earlier",
+    "    2. Where we are now  -- state, present tense, gaps named as gaps",
+    "    3. What's next       -- questions, your next steps and what you need from",
     "                            the founder, in ONE list; only lines that exist,",
     "                            never \"none\" or \"nothing until you reply\"",
     "",
