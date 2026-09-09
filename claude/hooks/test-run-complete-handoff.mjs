@@ -129,6 +129,7 @@ const E = {
   bgShell: JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "s", name: "Bash", input: { command: "x", run_in_background: true } }] } }),
   fgShell: JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "s", name: "Bash", input: { command: "x" } }] } }),
   agent: JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "a", name: "Agent", input: {} }] } }),
+  resume: JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "r", name: "SendMessage", input: { to: "a1b2c3", message: "carry on" } }] } }),
   movedToBg: JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "s", content: "Command did not complete within its 120s timeout and was moved to the background (ID: abc)." }] } }),
   plainResult: JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "s", content: "ok" }] } }),
   notif: JSON.stringify({ type: "user", promptSource: "system", message: { role: "user", content: "<task-notification>\n<task-id>abc</task-id>\n<status>completed</status>\n</task-notification>" } }),
@@ -217,6 +218,13 @@ try {
     const p = fixture("agentpending", [E.human, E.edit, E.agent]);
     const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Waiting." });
     ok(r.out === null, "an Agent launch with no notification yet is a wait");
+  }
+  {
+    // A finished agent resumed with SendMessage is back in flight and will notify
+    // again; observed 2026-09-08 when the hook would have nagged exactly that wait.
+    const p = fixture("resumed", [E.human, E.edit, E.resume]);
+    const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Waiting." });
+    ok(r.out === null, "an agent resumed with SendMessage is a wait too");
   }
   {
     // CONTROL: the same launch, now closed by its notification, IS a finished run.

@@ -97,7 +97,7 @@ uncertain case exits 0. It stays silent when:
 
 Set `HANDOFF_HOOK=off` to disable it entirely.
 
-Tests: `node claude/hooks/test-run-complete-handoff.mjs` (38 checks). Every
+Tests: `node claude/hooks/test-run-complete-handoff.mjs` (39 checks). Every
 "stays silent" case is paired with a control that differs in one field and does
 block, because a hook that never fires and a hook that is wired correctly
 produce identical output on a quiet turn.

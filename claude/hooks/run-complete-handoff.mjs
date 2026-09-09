@@ -219,6 +219,11 @@ function measureWork(transcriptPath) {
       tools++;
       if (MUTATING.has(block.name)) mutated = true;
       if (block.name === "Agent") launches++;
+      // Resuming a finished subagent with SendMessage puts it back in flight and ends
+      // in a task notification just like a fresh launch. A SendMessage to a peer
+      // session may never notify, so this over-counts toward silence -- the direction
+      // this hook is allowed to be wrong in.
+      if (block.name === "SendMessage") launches++;
       if (SHELLS.has(block.name) && block.input?.run_in_background) launches++;
     }
   }
