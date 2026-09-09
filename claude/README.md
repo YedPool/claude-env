@@ -75,7 +75,7 @@ matters most is the end of a long run, when context is full and wrapping up is
 exactly when it gets forgotten.
 
 **The hook is deliberately reluctant.** Blocking wrongly costs a turn and
-answers a one-line question with three lettered headings; failing to block costs a
+answers a one-line question with three numbered headings; failing to block costs a
 handoff the founder can ask for in four words. Those are not symmetric, so every
 uncertain case exits 0. It stays silent when:
 
