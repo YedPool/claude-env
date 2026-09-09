@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 //
-// run-complete-handoff.mjs - Stop hook. Asks for the five-part handoff when a run of
-// real work ends without one.
+// run-complete-handoff.mjs - Stop hook. Asks for the three-part handoff (A/B/C) when a
+// run of real work ends without one.
 //
 // WHY A HOOK AND NOT JUST THE SKILL. A skill fires when the model decides it applies,
 // and the moment the format matters most - the end of a long run, when context is full
@@ -11,9 +11,9 @@
 //
 // WHICH WAY THIS BREAKS WHEN ITS INPUT IS WRONG, which is the question worth asking of
 // any check. Blocking wrongly costs a real turn and interrupts a conversational answer
-// with five roman numerals nobody wanted. Failing to block costs a handoff the founder
-// can ask for in four words. Those are not symmetric, so EVERY uncertain case exits 0.
-// The bar is deliberately high and the misses are deliberate.
+// with three lettered headings nobody wanted. Failing to block costs a handoff the
+// founder can ask for in four words. Those are not symmetric, so EVERY uncertain case
+// exits 0. The bar is deliberately high and the misses are deliberate.
 //
 // THE LOOP GUARD IS NOT OPTIONAL. Claude Code passes stop_hook_active=true once this
 // hook has already blocked; returning block again from that state is how a session
@@ -36,6 +36,10 @@ import { readFileSync, openSync, fstatSync, readSync, closeSync } from "node:fs"
 //
 // Do not raise this to "be safe". If a turn genuinely does not fit, the correct outcome
 // is the one below: no human turn found, treat it as not-a-run, stay silent.
+//
+// DECLARED ABOVE THE main() CALL. main() runs at module top, so a `const` further down
+// is still in its temporal dead zone when tailLines first touches it; that throws, the
+// catch turns it into "unreadable transcript", and the hook goes silent on every run.
 const TAIL_BYTES = 2 * 1024 * 1024;
 
 // A hook that throws is a hook that breaks every session on the machine. One try/catch
@@ -72,12 +76,14 @@ function main() {
   //    than re-reading the transcript keeps this cheap.
   if (hasHandoff(input.last_assistant_message || "")) process.exit(0);
 
-  // 3. Was this a RUN, or a conversation? Only a run gets asked.
+  // 3. Was this a RUN, or a conversation? Only a run gets asked. This also answers
+  //    "is anything still in flight" from the transcript itself - see measureWork.
   const work = measureWork(input.transcript_path);
   if (!work.isRun) process.exit(0);
 
   // 4. Work is still in flight. A background task that has not reported is not a
-  //    finished run, and its result may change every section of the handoff.
+  //    finished run, and its result may change every section of the handoff. This
+  //    field covers agents; shell jobs are caught inside measureWork.
   if (Array.isArray(input.background_tasks) && input.background_tasks.length > 0) {
     process.exit(0);
   }
@@ -85,22 +91,34 @@ function main() {
   block(work);
 }
 
-// The five headings, matched loosely: roman numeral, any separator, the section word.
+// The three headings, matched loosely: capital letter, any separator, the section word.
 // Loose on purpose - a handoff that used an em dash instead of a double hyphen, or
-// bolded the numerals, is still a handoff, and re-asking for one that is already there
+// bolded the letters, is still a handoff, and re-asking for one that is already there
 // is the most annoying way this hook can fail.
+//
+// THE SHAPE CHANGED 2026-09-08 (founder): A/B/C replaced I-V, and the last three roman
+// sections folded into C "What's next". The old five-heading form is still accepted so a
+// session that loaded the skill before the change is not nagged twice for a handoff it
+// already wrote; the skill, not the hook, owns which form is current.
 function hasHandoff(text) {
   if (!text) return false;
-  const marks = [
+  const lettered = [
+    /\bA\b[^\n]{0,12}what happened/i,
+    /\bB\b[^\n]{0,12}where we are/i,
+    /\bC\b[^\n]{0,12}what'?s next/i,
+  ];
+  // Two of three: A and B alone still say "this was a handoff", and the hook does not
+  // re-litigate a near miss.
+  if (lettered.filter((re) => re.test(text)).length >= 2) return true;
+
+  const roman = [
     /\bI\b[^\n]{0,12}what happened/i,
     /\bII\b[^\n]{0,12}where we are/i,
     /\bIII\b[^\n]{0,12}questions?/i,
     /\bIV\b[^\n]{0,12}(my |your )?next steps/i,
     /\bV\b[^\n]{0,12}what (i|you) need/i,
   ];
-  // Four of five, so a run with genuinely no questions that dropped the heading still
-  // counts. The skill asks for all five; the hook does not re-litigate a near miss.
-  return marks.filter((re) => re.test(text)).length >= 4;
+  return roman.filter((re) => re.test(text)).length >= 4;
 }
 
 // Read the transcript backwards to the last human turn and describe what happened since.
@@ -118,9 +136,15 @@ function measureWork(transcriptPath) {
   }
 
   const MUTATING = new Set(["Edit", "Write", "NotebookEdit"]);
+  const SHELLS = new Set(["Bash", "PowerShell"]);
   let tools = 0;
   let mutated = false;
   let foundHumanTurn = false;
+  // Background work launched since the last human turn, minus the notifications that
+  // closed it. Counted rather than matched by id, because a count that is wrong can
+  // only be wrong in one direction here and that direction is "stay silent".
+  let launches = 0;
+  let completions = 0;
 
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim();
@@ -140,7 +164,8 @@ function measureWork(transcriptPath) {
     //   - tool RESULTS (excluded by isToolResult - 123 of 134 user entries in a live
     //     transcript, so a walk that ignores this measures one tool call, not a run)
     //   - TASK NOTIFICATIONS from finished background work, promptSource:"system"
-    //   - SKILL INJECTIONS and local-command output, isMeta:true
+    //     (and, measured 2026-09-08, a string content starting "<task-notification>")
+    //   - SKILL INJECTIONS, Stop-hook feedback and local-command output, isMeta:true
     //
     // Measured across 286 real sessions: 51% of walks stopped at something the founder
     // never typed, and 13.3% of sessions flipped verdict because of it. One case scanned
@@ -151,9 +176,29 @@ function measureWork(transcriptPath) {
     // That failure is concentrated exactly here: this box's operating rule is that
     // everything runs in the background, so task notifications are constant.
     if (entry.type === "user" && !isToolResult(entry)) {
+      if (isTaskNotification(entry)) {
+        // One notification closes one launch; a notification that names several
+        // task ids closes several.
+        const ids = (String(entry?.message?.content ?? "").match(/<task-id>/g) || []).length;
+        completions += Math.max(1, ids);
+        continue;
+      }
       if (entry.isMeta === true || entry.promptSource === "system") continue;
       foundHumanTurn = true;
       break;
+    }
+
+    if (entry.type === "user") {
+      // A foreground command that hit its timeout is moved to the background by the
+      // harness, and the tool result says so. That is a launch too.
+      for (const block of contentBlocks(entry)) {
+        if (block?.type !== "tool_result") continue;
+        const text = typeof block.content === "string"
+          ? block.content
+          : JSON.stringify(block.content ?? "");
+        if (text.includes("moved to the background (ID:")) launches++;
+      }
+      continue;
     }
 
     if (entry.type !== "assistant") continue;
@@ -161,6 +206,8 @@ function measureWork(transcriptPath) {
       if (block?.type !== "tool_use") continue;
       tools++;
       if (MUTATING.has(block.name)) mutated = true;
+      if (block.name === "Agent") launches++;
+      if (SHELLS.has(block.name) && block.input?.run_in_background) launches++;
     }
   }
 
@@ -169,6 +216,16 @@ function measureWork(transcriptPath) {
   // asymmetry this file already chose, and the miss it costs (a single turn generating
   // more than TAIL_BYTES) is rare and deliberate rather than accidental.
   if (!foundHumanTurn) return none;
+
+  // SOMETHING IS STILL IN FLIGHT, so this is a WAIT, not a finished run. The founder's
+  // operating model is that a session ends its turn to wait for a background job and
+  // the harness re-invokes it on completion; a hook that demands a handoff at that
+  // moment costs a full billed turn and gets a handoff the pending result will make
+  // stale. The hook input's `background_tasks` covers agents; shell jobs started with
+  // run_in_background, and foreground commands the harness moved to the background on
+  // timeout, do not appear there. Measured 2026-09-08 across every transcript on this
+  // box: 12 firings since install, 4 of them on a session that was waiting.
+  if (launches > completions) return none;
 
   // The threshold. Four tool calls is roughly "looked something up and answered"; a real
   // run clears it easily. A single file edit counts on its own, because a change to the
@@ -200,6 +257,13 @@ function isToolResult(entry) {
   return contentBlocks(entry).some((b) => b?.type === "tool_result");
 }
 
+// A task notification is recorded as a user entry whose content is a string starting
+// with the notification tag (promptSource is "system" on the same entries).
+function isTaskNotification(entry) {
+  const c = entry?.message?.content;
+  return typeof c === "string" && c.trimStart().startsWith("<task-notification>");
+}
+
 function contentBlocks(entry) {
   const content = entry?.message?.content;
   return Array.isArray(content) ? content : [];
@@ -213,18 +277,18 @@ function block(work) {
   const reason = [
     `This run ${did}, and it is ending without a handoff.`,
     "",
-    "Invoke the run-complete-handoff skill and close with its five sections, as",
-    "numbered one-liners:",
+    "Invoke the run-complete-handoff skill and close with its three sections, as",
+    "numbered one-liners with no blank line between a heading and its items:",
     "",
-    "    I    What happened      -- lead with any correction to what you said earlier",
-    "    II   Where we are now   -- state, present tense, gaps named as gaps",
-    "    III  Questions          -- only ones you cannot answer yourself",
-    "    IV   My next steps      -- \"nothing until you reply\" is a real answer",
-    "    V    What I need from you -- commands, decisions, credentials; be specific",
+    "    A  What happened     -- lead with any correction to what you said earlier",
+    "    B  Where we are now  -- state, present tense, gaps named as gaps",
+    "    C  What's next       -- questions, your next steps and what you need from",
+    "                            the founder, in ONE list; only lines that exist,",
+    "                            never \"none\" or \"nothing until you reply\"",
     "",
-    "Every heading appears even when the answer is \"nothing\". If this was not a run",
-    "-- a lookup, a conversational reply, a pause before more work -- say so in one",
-    "line and stop; you will not be asked again this turn.",
+    "All three headings appear. If this was not a run -- a lookup, a conversational",
+    "reply, a pause before more work -- say so in one line and stop; you will not be",
+    "asked again this turn.",
   ].join("\n");
 
   process.stdout.write(JSON.stringify({ decision: "block", reason }));
