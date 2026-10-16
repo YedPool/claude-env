@@ -83,6 +83,33 @@ function transcript(name, { tools = 0, mutating = false, humanTurnFirst = true }
 }
 
 const HANDOFF_TEXT = [
+  "```text",
+  "1. What happened",
+  "    1.1. Did a thing.",
+  "",
+  "2. Where we are now",
+  "    2.1. Thing is done.",
+  "",
+  "3. What's next",
+  "    3.1. Tell me if you want it committed.",
+  "```",
+].join("\n");
+
+// The lettered form that lived for part of 2026-09-08. Still accepted.
+const LETTERED_HANDOFF_TEXT = [
+  "**A -- What happened**",
+  "1. Did a thing.",
+  "",
+  "**B -- Where we are now**",
+  "1. Thing is done.",
+  "",
+  "**C -- What's next**",
+  "1. Tell me if you want it committed.",
+].join("\n");
+
+// The form the skill used until 2026-09-08. Still accepted, so a session that loaded
+// the old skill is not nagged twice for a handoff it already wrote.
+const OLD_HANDOFF_TEXT = [
   "**I -- What happened**",
   "1. Did a thing.",
   "**II -- Where we are now**",
@@ -95,6 +122,26 @@ const HANDOFF_TEXT = [
   "1. Nothing.",
 ].join("\n");
 
+// One JSONL entry per shape the in-flight tests need.
+const E = {
+  human: JSON.stringify({ type: "user", message: { role: "user", content: "do the thing" } }),
+  edit: JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "e", name: "Edit", input: {} }] } }),
+  bgShell: JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "s", name: "Bash", input: { command: "x", run_in_background: true } }] } }),
+  fgShell: JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "s", name: "Bash", input: { command: "x" } }] } }),
+  agent: JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "a", name: "Agent", input: {} }] } }),
+  resume: JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "r", name: "SendMessage", input: { to: "a1b2c3", message: "carry on" } }] } }),
+  movedToBg: JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "s", content: "Command did not complete within its 120s timeout and was moved to the background (ID: abc)." }] } }),
+  plainResult: JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "s", content: "ok" }] } }),
+  notif: JSON.stringify({ type: "user", promptSource: "system", message: { role: "user", content: "<task-notification>\n<task-id>abc</task-id>\n<status>completed</status>\n</task-notification>" } }),
+  meta: JSON.stringify({ type: "user", isMeta: true, message: { role: "user", content: "Stop hook feedback:\nThis run changed files" } }),
+};
+
+function fixture(name, entries) {
+  const p = join(sandbox, name + ".jsonl");
+  writeFileSync(p, entries.join("\n"), "utf8");
+  return p;
+}
+
 try {
   console.log("\nfires on a real run");
   {
@@ -102,7 +149,8 @@ try {
     const r = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: "All done!" });
     ok(r.code === 0, "exits 0 even when blocking (block is data, not an exit code)");
     ok(r.out?.decision === "block", "CONTROL: a 6-tool run with no handoff DOES block");
-    ok(/What I need from you/.test(r.out?.reason || ""), "and the reason carries the format");
+    ok(/3\. What's next/.test(r.out?.reason || ""), "and the reason carries the 1 / 2 / 3 format");
+    ok(!/What I need from you/.test(r.out?.reason || ""), "and no longer asks for the retired five-section form");
   }
   {
     // One Edit, nothing else. A change to the founder's tree must never go unreported.
@@ -121,7 +169,17 @@ try {
   {
     const t = transcript("done", { tools: 6 });
     const r = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: HANDOFF_TEXT });
-    ok(r.out === null, "a message that already has the five sections is left alone");
+    ok(r.out === null, "a message that already has the three sections is left alone");
+  }
+  {
+    const t = transcript("lettereddone", { tools: 6 });
+    const r = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: LETTERED_HANDOFF_TEXT });
+    ok(r.out === null, "the retired A/B/C form is still accepted");
+  }
+  {
+    const t = transcript("olddone", { tools: 6 });
+    const r = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: OLD_HANDOFF_TEXT });
+    ok(r.out === null, "the retired five-section form is still accepted, so nobody is asked twice");
   }
   {
     const t = transcript("chat", { tools: 2 });
@@ -136,7 +194,59 @@ try {
       last_assistant_message: "Running.",
       background_tasks: [{ id: "b1", status: "running" }],
     });
-    ok(r.out === null, "work still in flight is not a finished run");
+    ok(r.out === null, "work still in flight (background_tasks) is not a finished run");
+  }
+
+  console.log("\nin-flight work the hook input does not list");
+  {
+    // THE CASE MEASURED 2026-09-08. background_tasks covers agents; a shell job started
+    // with run_in_background is invisible to it, and the session ended its turn to WAIT
+    // for it - the founder's whole operating model. 4 of the 12 firings since install
+    // were this. The transcript itself says a launch is pending: count them.
+    const p = fixture("bgshell", [E.human, E.edit, E.bgShell]);
+    const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Waiting." });
+    ok(r.out === null, "a backgrounded shell job with no notification yet is a wait, not a run");
+  }
+  {
+    // A foreground command that hit its timeout: the harness moves it to the background
+    // and says so in the tool result. Same wait, different spelling.
+    const p = fixture("movedbg", [E.human, E.edit, E.fgShell, E.movedToBg]);
+    const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Waiting." });
+    ok(r.out === null, "a command the harness moved to the background is a wait too");
+  }
+  {
+    const p = fixture("agentpending", [E.human, E.edit, E.agent]);
+    const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Waiting." });
+    ok(r.out === null, "an Agent launch with no notification yet is a wait");
+  }
+  {
+    // A finished agent resumed with SendMessage is back in flight and will notify
+    // again; observed 2026-09-08 when the hook would have nagged exactly that wait.
+    const p = fixture("resumed", [E.human, E.edit, E.resume]);
+    const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Waiting." });
+    ok(r.out === null, "an agent resumed with SendMessage is a wait too");
+  }
+  {
+    // CONTROL: the same launch, now closed by its notification, IS a finished run.
+    // Without this the three silences above would also pass on a hook that had simply
+    // stopped firing.
+    const p = fixture("bgdone", [E.human, E.edit, E.bgShell, E.notif]);
+    const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Done." });
+    ok(r.out?.decision === "block", "CONTROL: the same launch closed by a task notification does block");
+  }
+  {
+    // CONTROL: a foreground shell with an ordinary result is not a launch.
+    const p = fixture("fgshell", [E.human, E.edit, E.fgShell, E.plainResult]);
+    const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Done." });
+    ok(r.out?.decision === "block", "CONTROL: a foreground shell call is not a pending launch");
+  }
+  {
+    // Two launches, one notification, then hook feedback and more edits. The pending
+    // launch sits BEFORE the notification and the isMeta entry; a walk that stopped at
+    // either would not see it.
+    const p = fixture("oneofttwo", [E.human, E.agent, E.edit, E.agent, E.notif, E.meta, E.edit]);
+    const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Waiting." });
+    ok(r.out === null, "a launch behind a notification and hook feedback is still counted as pending");
   }
   {
     const t = transcript("off", { tools: 6 });
@@ -275,18 +385,26 @@ try {
     // U+2014 in the source of a test whose subject is exactly that character.
     const EM = String.fromCharCode(0x2014);
     const loose = [
-      `I ${EM} What happened`,
-      `II ${EM} Where we are now`,
-      `III ${EM} Questions`,
-      `IV ${EM} My next steps`,
-      `V ${EM} What I need from you`,
+      `1 ${EM} What happened`,
+      `2 ${EM} Where we are now`,
+      `3 ${EM} What's next`,
     ].join("\n");
     const r = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: loose });
-    ok(r.out === null, "recognises the format with em dashes instead of hyphens");
+    ok(r.out === null, "recognises the format with em dashes instead of dots");
 
-    const partial = "I -- What happened\nII -- Where we are now";
+    const partial = "1. What happened\n    1.1. x";
     const r2 = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: partial });
-    ok(r2.out?.decision === "block", "CONTROL: two sections is not a handoff and still blocks");
+    ok(r2.out?.decision === "block", "CONTROL: one numbered section is not a handoff and still blocks");
+
+    // A numbered list in ordinary prose must not read as a handoff: "1. what happened"
+    // needs its sibling "2. where we are" before it counts.
+    const prose = "Here is the plan:\n1. What happened first was X.\n2. Then Y.\n3. Then Z.";
+    const r4 = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: prose });
+    ok(r4.out?.decision === "block", "CONTROL: an ordinary numbered list is not a handoff");
+
+    const oldPartial = "I -- What happened\nII -- Where we are now";
+    const r3 = run({ hook_event_name: "Stop", transcript_path: t, last_assistant_message: oldPartial });
+    ok(r3.out?.decision === "block", "CONTROL: two of the old five sections is not a handoff either");
   }
 } finally {
   rmSync(sandbox, { recursive: true, force: true });
