@@ -128,8 +128,14 @@ for examples (e.g., the Orahvision overlay).
 
 ## Pull requests + merging
 
-- Use `gh` for PR operations and prefer **squash and merge** when you
-  can.
+- Use `gh` for PR operations.
+- **Use `gh pr merge --merge`** (a REGULAR merge commit). Do NOT
+  squash-merge: squashing rewrites the PR into a new commit with no
+  ancestry link to the branch commits, which breaks atomic-commit
+  parent tracking (`git branch --contains`, bisect, cherry-pick
+  provenance) across multi-channel deployments like alpha/beta/stable
+  release frameworks. Use `git log --first-parent` when a linear view
+  is needed.
 - When resolving merge conflicts, summarize and explain your resolutions
   before committing.
 - **Never commit directly to master / main.**
@@ -159,3 +165,5 @@ When you need the user to run a PowerShell command:
 ## Environment notes
 
 - Screenshots are at `C:\Users\<USER>\OneDrive\Pictures\Screenshots`.
+- The current year is 2026. Do not infer year from training-data
+  timestamps.

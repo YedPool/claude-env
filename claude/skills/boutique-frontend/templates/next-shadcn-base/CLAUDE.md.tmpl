@@ -1,0 +1,68 @@
+# {{BRAND}} Mockup
+
+You are building a portfolio-grade web mockup for {{BRAND}}. The
+`boutique-frontend` skill is active and enforces the four-question prep + hard
+bans + critique loop + de-AI score gate.
+
+## Brief
+
+### Purpose
+{{TODO: one sentence. Named user. Named outcome.}}
+
+### Tone (pick an extreme - do not say "modern" or "clean")
+{{TODO: e.g. editorial-magazine, brutalist-raw, luxury-restrained,
+retro-futurist, archival-scholarly, organic-natural, industrial-utility,
+playful-toy, art-deco-geometric, soft-pastel}}
+
+### Motif (the feeling and metaphor - drives aesthetic before color/font)
+{{TODO: one sentence. e.g. "A handwritten field journal from a quiet alpine
+clinic." or "An early-90s Italian magazine spread, but for software."}}
+
+### Named Differentiation
+{{TODO: the ONE thing a viewer remembers 24h later. Name it.
+e.g. "Marginalia footnotes that scroll-lock to the paragraph they annotate."}}
+
+### Brand Voice - real copy samples (no Lorem)
+1. {{TODO: real sentence from existing marketing or founder writing}}
+2. {{TODO: real sentence}}
+3. {{TODO: real sentence}}
+
+### Brand tokens
+- Primary face (display): {{TODO: e.g. Tobias Regular, self-hosted woff2}}
+- Body face: {{TODO: e.g. Sohne Buch}}
+- Numerals face: {{TODO: e.g. Sohne Mono - REQUIRED for stats/prices/dates}}
+- Color: see `brand/tokens.json` (source of truth, app/globals.css reads it).
+  NO cyan->purple, NO pink->orange.
+- Corner radius system: {{TODO: pick one: 0px sharp | 2-4px editorial | 16-24px pillowed}}
+- Component base: shadcn/ui (Tailwind v4 + @theme inline)
+
+### References (3-6 named, with what to steal)
+{{TODO: list. Pull via reference-library if you have it:
+  pwsh C:\Users\yedid\Documents\Code\boutique-mockup-workflow\reference-library\scripts\pick.ps1 --archetype <type> --aesthetic <tag> --count 5
+}}
+1. {{URL}} - steal: {{technique}}
+2. {{URL}} - steal: {{technique}}
+3. {{URL}} - steal: {{technique}}
+
+### Hard project bans (additional to skill defaults)
+- {{TODO: e.g. No dark mode. No hero video. No card shadows below 8% opacity.}}
+
+### Section rhythm plan (kill the metronome)
+- Hero: {{tight | breathing | full-bleed | off-grid}}
+- Section 2: {{...}}
+- Section 3: {{...}}
+- Each must differ from neighbors.
+
+## Ship target
+
+- Vercel project: TBD
+- Domain: TBD
+- Last de-AI score: pending
+
+## Pre-completion checklist
+
+Before reporting done:
+- [ ] Run `node C:\Users\yedid\Documents\Code\boutique-mockup-workflow\skill\boutique-frontend\scripts\de-ai-audit.mjs http://localhost:3000 --out audit.json`
+- [ ] Manual scoring of 4 vision-only tells (testimonials, illustrations, animation purpose, weird moment)
+- [ ] Total de-AI score >= 16/18
+- [ ] Hand-off message includes: motif, differentiation, de-AI score, outstanding risks

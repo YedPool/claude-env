@@ -1,0 +1,11 @@
+{
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "rules": {
+    "no-restricted-imports": ["error", {
+      "patterns": [{
+        "group": ["**/components/_imported/**", "@/components/_imported/**"],
+        "message": "Promote the component out of _imported/ via the dedup pass before importing."
+      }]
+    }]
+  }
+}
