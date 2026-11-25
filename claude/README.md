@@ -90,15 +90,20 @@ The settings file references one plugin via `enabledPlugins`:
 - `code-review@claude-plugins-official` — slash-command code-review
   workflow.
 
-The author also has `deep-review@claude-plugins-official` installed
-(it shows up as a Skill, not a marketplace plugin reference). If you
-want it on a fresh machine, install it manually from inside Claude
-Code:
+Install it from inside Claude Code on a fresh machine — `install.ps1`
+cannot, because adding a marketplace requires an interactive session:
 
 ```text
 /plugin marketplace add claude-plugins-official
-/plugin install deep-review@claude-plugins-official
+/plugin install code-review@claude-plugins-official
 ```
+
+That is the whole list. **Do not install
+`deep-review@claude-plugins-official`.** A marketplace plugin shares that
+name, but `deep-review` here is a local custom skill maintained in
+[`skills/deep-review/SKILL.md`](./skills/deep-review/SKILL.md) and copied
+into `~/.claude/skills/deep-review/` by `install.ps1`. Installing the
+marketplace plugin shadows the custom skill.
 
 See [`plugins.md`](./plugins.md) for the full list.
 
