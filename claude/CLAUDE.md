@@ -156,6 +156,15 @@ When you need the user to run a PowerShell command:
 - The one-liner format lets the user copy-paste directly into a
   PowerShell prompt without losing line breaks or formatting.
 
+## Project & repository management
+
+- All code projects are managed primarily in GitHub. When starting a new
+  project, create a new GitHub repository for it first.
+- Each repo's main branch should be cloned/tracked to a local folder
+  under `Documents\Code\REPONAME` (e.g., `Documents\Code\claude-env`).
+  Worktrees for that repo go in `Documents\Code\REPONAME Worktrees\`
+  as per the Worktrees rule above.
+
 ## Environment notes
 
 - Screenshots are at `C:\Users\<USER>\OneDrive\Pictures\Screenshots`.
