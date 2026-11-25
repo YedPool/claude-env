@@ -10,7 +10,7 @@
 //
 // Run: node claude/hooks/test-run-complete-handoff.mjs
 
-import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { writeFileSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -166,6 +166,73 @@ try {
     writeFileSync(p, lines.join("\n"), "utf8");
     const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Answer." });
     ok(r.out === null, "a previous turn's 10 tool calls do not leak into this turn");
+  }
+
+  console.log("\nboundaries that are not a human turn");
+  {
+    // A TASK NOTIFICATION from finished background work. It is type:"user" with no
+    // tool_result, so a naive walk stops there and reports a 20-call run as 0 calls.
+    // Measured across 286 real sessions: this pattern flipped the verdict on 13.3% of
+    // them, and it is constant on a box whose rule is that everything runs in background.
+    const p = join(sandbox, "notif.jsonl");
+    const lines = [JSON.stringify({ type: "user", message: { role: "user", content: "go" } })];
+    for (let i = 0; i < 8; i++) {
+      lines.push(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "n" + i, name: "Bash", input: {} }] } }));
+      lines.push(JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "n" + i }] } }));
+    }
+    lines.push(JSON.stringify({ type: "user", promptSource: "system", message: { role: "user", content: "<task-notification>done</task-notification>" } }));
+    lines.push(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Finished." }] } }));
+    writeFileSync(p, lines.join("\n"), "utf8");
+    const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Finished." });
+    ok(r.out?.decision === "block", "a task notification is not a human turn - the run behind it still counts");
+    ok(/8 tool calls/.test(r.out?.reason || ""), "and the full count is reported, not the post-notification zero");
+  }
+  {
+    // A SKILL INJECTION (isMeta) has the same shape and the same problem.
+    const p = join(sandbox, "meta.jsonl");
+    const lines = [JSON.stringify({ type: "user", message: { role: "user", content: "go" } })];
+    for (let i = 0; i < 6; i++) {
+      lines.push(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "m" + i, name: "Bash", input: {} }] } }));
+      lines.push(JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "m" + i }] } }));
+    }
+    lines.push(JSON.stringify({ type: "user", isMeta: true, message: { role: "user", content: "Base directory for this skill: ..." } }));
+    writeFileSync(p, lines.join("\n"), "utf8");
+    const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Done." });
+    ok(r.out?.decision === "block", "a skill injection is not a human turn either");
+  }
+  {
+    // CONTROL: a genuinely typed turn MUST still stop the walk, or the two tests above
+    // would pass on a hook that had simply stopped honouring boundaries at all.
+    const p = join(sandbox, "typed.jsonl");
+    const lines = [];
+    for (let i = 0; i < 10; i++) {
+      lines.push(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "q" + i, name: "Bash", input: {} }] } }));
+    }
+    lines.push(JSON.stringify({ type: "user", promptSource: "typed", message: { role: "user", content: "quick question" } }));
+    lines.push(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Answer." }] } }));
+    writeFileSync(p, lines.join("\n"), "utf8");
+    const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Answer." });
+    ok(r.out === null, "CONTROL: a typed prompt still stops the walk, so prior work does not leak in");
+  }
+
+  console.log("\nbounded tail read");
+  {
+    // The read is capped at 2 MB. Build a transcript with the human turn buried behind
+    // more than that, and the hook must stay silent rather than attribute unattributable
+    // work to this turn.
+    const p = join(sandbox, "huge.jsonl");
+    const filler = JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "tool_use", id: "f", name: "Bash", input: { pad: "x".repeat(2000) } }] },
+    });
+    const lines = [JSON.stringify({ type: "user", message: { role: "user", content: "go" } })];
+    for (let i = 0; i < 1200; i++) lines.push(filler); // ~2.4 MB, past the cap
+    writeFileSync(p, lines.join("\n"), "utf8");
+    const r = run({ hook_event_name: "Stop", transcript_path: p, last_assistant_message: "Done." });
+    ok(r.out === null, "no human turn inside the tail window means stay silent, not guess");
+
+    const stat = statSync(p);
+    ok(stat.size > 2 * 1024 * 1024, `and the fixture really is past the cap (${Math.round(stat.size / 1048576)} MB)`);
   }
 
   console.log("\nnever breaks a session");
